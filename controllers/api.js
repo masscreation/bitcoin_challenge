@@ -770,23 +770,53 @@ exports.getBitGo = function(req, res, next) {
  * BitGo send coins example
  */
 exports.postBitGo = function(req, res, next) {
+  BitGo = require('bitgo');
+
   var bitgo = new BitGo.BitGo({ env: 'test', accessToken: secrets.bitgo.accessToken });
   var walletId = req.session.walletId;
 
   try {
     bitgo.wallets().get({ id: walletId }, function(err, wallet) {
-      wallet.sendCoins({
-        address: req.body.address,
-        amount: parseInt(req.body.amount),
-        walletPassphrase: req.sessionID
-      }, function(err, result) {
-        if (err) {
-          req.flash('errors', { msg: err.message });
+      if (req.body.address) {
+        wallet.sendCoins({
+          address: req.body.address,
+          amount: parseInt(req.body.amount),
+          walletPassphrase: req.sessionID
+        }, function(err, result) {
+          if (err) {
+            req.flash('errors', { msg: err.message });
+            return res.redirect('/api/bitgo');
+          }
+          req.flash('info', { msg: 'txid: ' + result.hash + ', hex: ' + result.tx });
           return res.redirect('/api/bitgo');
+        });
+      } else {
+        if (req.body.url === '') {
+          wallet.removePolicyRule({id: 'webhookRule1'}, function callback(err, walletAfterPolicyChange) {
+            if (err) {
+              req.flash('errors', {msg: err.message});
+              return res.redirect('/api/bitgo');
+            }
+            req.flash('info', {msg: 'url was removed'});
+            return res.redirect('/api/bitgo');
+          });
+        } else {
+          var rule = {
+            id: "webhookRule1",
+            type: "webhook",
+            action: { type: "deny" },
+            condition: { "url": req.body.url }
+          };
+          wallet.setPolicyRule(rule, function callback(err, walletAfterPolicyChange) {
+            if (err) {
+              req.flash('errors', {msg: err.message});
+              return res.redirect('/api/bitgo');
+            }
+            req.flash('info', {msg: 'url was set up'});
+            return res.redirect('/api/bitgo');
+          });
         }
-        req.flash('info', { msg: 'txid: ' + result.hash + ', hex: ' + result.tx });
-        return res.redirect('/api/bitgo');
-      });
+      }
     });
   } catch (e) {
     req.flash('errors', { msg: e.message });
